@@ -722,10 +722,10 @@ AO_contribution_p1 <- AO_importance_data |>
     axis.title.x = element_text(size = 20,colour = 'black'),
     axis.ticks.length.x = unit(0.2,"cm"),
     axis.ticks.length.y = unit(0,"cm"),
-    panel.grid.major.y = element_blank(),  # 去掉纵轴的格栅
+    panel.grid.major.y = element_blank(),  
     panel.grid.minor.y = element_blank(),
-    panel.grid.major.x = element_line(colour = "grey", size = 0.5),  # 加粗横轴的格栅
-    panel.grid.minor.x = element_blank(),  # 去掉横轴的次要格栅
+    panel.grid.major.x = element_line(colour = "grey", size = 0.5),  
+    panel.grid.minor.x = element_blank(),  
     legend.position = 'none'
   )
 
@@ -1340,3 +1340,159 @@ mps_task_train |>
   labs(title = 'Data Distribution', x = 'Value', y = 'Density') +
   theme_minimal()
 
+
+# 4 Model prediction----
+## 4.1 MPs concentrations ----
+prediction_all = lrn_ranger_tune$predict_newdata(data.table(predict_sea))
+
+predict_sea <- cbind(predict_sea, prediction_all$response, prediction_all$se) 
+colnames(predict_sea)[c(45,46)] <- c('response','se')
+predict_sea <- predict_sea |> mutate(conc = 10^response-1)
+
+
+# prediction  log
+mps_plot_all_log <- 
+  ggplot() + 
+  geom_sf(data = world, fill ='lightgray', col = 'lightgray') +
+  geom_raster(data = predict_sea, 
+              aes(x = lon, y =lat, fill = response)) + 
+  scale_fill_gradientn(colors = c("#00BFFF", '#F4A460', '#FF4500',
+                                  '#FF0000'),
+                       values = rescale(c(0, 
+                                          log10(8), 
+                                          log10(15),
+                                          log10(22), 
+                                          log10(max(predict_sea$conc)+1))))+
+  theme_bw() +
+  theme(
+    axis.text = element_text(size=16,colour = 'black'),
+    axis.title = element_text(size =20),
+    axis.ticks.length.x = unit(0.2,"cm"),
+    axis.ticks.x = element_line(colour = "black"),
+    axis.ticks.length.y = unit(0.2,"cm"),
+    axis.ticks.y = element_line(colour = "black"),
+    legend.background = element_blank(),
+    panel.border = element_rect(color = "black", linewidth = 1.5, fill = NA)
+    #legend.position = 'none'
+  ) +
+  guides(color = guide_legend(override.aes = list(size = 5)))+
+  scale_x_continuous(expand = expansion(mult = c(0,0))) +
+  scale_y_continuous(expand = expansion(mult = c(0,0))) +
+  labs(fill = 'log10(MPs + 1)')
+
+
+# prediction， se
+mps_plot_all_se <- 
+  ggplot() + 
+  geom_sf(data = world, fill ='lightgray', col = 'lightgray') +
+  geom_raster(data = predict_sea, 
+              aes(x = lon, y =lat, fill = se)) + 
+  scale_fill_gradientn(colors = c("#0061FF", '#FFFC00', '#FF0000'),
+                       values = rescale(c(0, 
+                                          0.15,
+                                          max(predict_sea$se))))+
+  theme_bw() +
+  theme(
+    axis.text = element_text(size=16,colour = 'black'),
+    axis.title = element_text(size =20),
+    axis.ticks.length.x = unit(0.2,"cm"),
+    axis.ticks.x = element_line(colour = "black"),
+    axis.ticks.length.y = unit(0.2,"cm"),
+    axis.ticks.y = element_line(colour = "black"),
+    legend.background = element_blank(),
+    panel.border = element_rect(color = "black", linewidth = 1.5, fill = NA)
+    #legend.position = 'none'
+  ) +
+  guides(color = guide_legend(override.aes = list(size = 5)))+
+  scale_x_continuous(expand = expansion(mult = c(0,0))) +
+  scale_y_continuous(expand = expansion(mult = c(0,0))) +
+  labs(fill = 'se')
+
+
+# WDPA
+poly1 <- st_read(dsn = "./marine_point/p1/WDPA_WDOECM_Jun2023_Public_marine_shp-polygons.shp")
+poly2 <- st_read(dsn = "./marine_point/p2/WDPA_WDOECM_Jun2023_Public_marine_shp-polygons.shp")
+poly3 <- st_read(dsn = "./marine_point/p3/WDPA_WDOECM_Jun2023_Public_marine_shp-polygons.shp")
+poly <- rbind(poly1,poly2,poly3)
+rm(poly1,poly2,poly3)
+
+
+mps_plot_all2 <- 
+  ggplot() + 
+  geom_sf(data = world, fill ='lightgray', col = 'lightgray') +
+  geom_raster(data = predict_sea |> 
+                mutate(conc_7 = case_when(
+                  conc <= 1 ~ 1,
+                  conc <= 2 ~ 2,
+                  conc <= 3 ~ 3,
+                  conc <= 6 ~ 4,
+                  conc <= 9 ~ 5,
+                  conc <= 12 ~ 6,
+                  conc > 12 ~ 7
+                ),conc_7 = factor(conc_7,labels = c('0–1',
+                                                    '1–2',
+                                                    '2–3',
+                                                    '3–6',
+                                                    '6–9',
+                                                    '9–12',
+                                                    '> 12'))), 
+              aes(x = lon, y =lat, fill = conc_7)) + 
+  scale_fill_manual(values = c('#0000FF','#0080FF','#00FFFF','#80FF80',
+                               '#FFFF00','#FF8000','#FF0000'))+
+  geom_sf(data = poly, fill = NA, col = 'black', size = 0.2) +
+  theme_bw() +
+  theme(
+    axis.text = element_text(size=16,colour = 'black'),
+    axis.title = element_text(size =20),
+    axis.ticks.length.x = unit(0.2,"cm"),
+    axis.ticks.x = element_line(colour = "black"),
+    axis.ticks.length.y = unit(0.2,"cm"),
+    axis.ticks.y = element_line(colour = "black"),
+    legend.background = element_blank(),
+    panel.border = element_rect(color = "black", linewidth = 1.5, fill = NA)
+    #legend.position = 'none'
+  ) +
+  guides(color = guide_legend(override.aes = list(size = 5)))+
+  scale_x_continuous(expand = expansion(mult = c(0,0))) +
+  scale_y_continuous(expand = expansion(mult = c(0,0))) +
+  labs(fill = 'MPs(particle/m3)')
+
+
+
+## 4.2 MP stock----
+# 6371 km2, grid  
+area_calculation <- function(lat,partition){
+  lat_low = abs(lat) - partition/2
+  area = 2*pi*6371^2*(sin((lat_low + partition)*pi/180) - sin(lat_low*pi/180))/(360/partition)
+  return(area)
+}
+# 5 m
+predict_sea <- predict_sea |> 
+  mutate(area = map2_dbl(lat,1,~area_calculation(.x,.y)))|> 
+  mutate(stock = conc*area*10^6*5)
+
+predict_sea_stock <- predict_sea |> group_by(sea) |> 
+  summarise(area_sum = sum(area),
+            stock_sum = sum(stock))|> 
+  arrange(desc(stock_sum)) 
+
+predict_sea_stock_plot <- 
+  predict_sea_stock |> mutate(sea = factor(sea, levels = unique(predict_sea_stock$sea))) |> 
+  ggplot() +
+  geom_bar(aes(sea, stock_sum/1e14),stat = "identity", 
+           fill = '#21908C', width = 0.5)+
+  geom_text(aes(sea, y = (stock_sum/1e14 + 0.3), label = round(stock_sum/1e14,3)))+
+  annotate('text', x = 6, y = 6, label = '42.792') +
+  theme_bw() +
+  theme(
+    axis.text = element_text(size=16,colour = 'black'),
+    axis.title = element_text(size =20),
+    axis.ticks.length.x = unit(0,"cm"),
+    axis.ticks.x = element_line(colour = "black"),
+    axis.ticks.length.y = unit(0.2,"cm"),
+    axis.ticks.y = element_line(colour = "black"),
+    legend.background = element_blank(),
+    panel.border = element_rect(color = "black", linewidth = 1.5, fill = NA),
+    legend.position = c(0.8,0.8)
+  ) +
+  scale_x_discrete(expand = expansion(mult = c(0.1,0.1))) 
